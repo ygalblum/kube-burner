@@ -187,6 +187,8 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 				job.RunPatchJob()
 			case config.ReadJob:
 				job.RunReadJob(0, job.JobIterations)
+			case config.KubeVirtJob:
+				job.RunKubeVirtJob(restConfig)
 			}
 			if job.BeforeCleanup != "" {
 				log.Infof("Waiting for beforeCleanup command %s to finish", job.BeforeCleanup)
@@ -346,6 +348,8 @@ func newExecutorList(configSpec config.Spec, kubeClientProvider *config.KubeClie
 			ex = setupPatchJob(job)
 		case config.ReadJob:
 			ex = setupReadJob(job)
+		case config.KubeVirtJob:
+			ex = setupKubeVirtJob(job)
 		default:
 			log.Fatalf("Unknown jobType: %s", job.JobType)
 		}
