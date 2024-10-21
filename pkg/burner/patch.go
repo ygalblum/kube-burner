@@ -34,12 +34,30 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+var (
+	defaultPatchExecutionMode   = config.PatchExecutionModeParallel
+	supportedPatchExecutionMode = map[config.PatchExecutionMode]struct{}{
+		config.PatchExecutionModeParallel:   {},
+		config.PatchExecutionModeSequential: {},
+	}
+)
+
 func setupPatchJob(jobConfig config.Job) Executor {
 	var f io.Reader
 	var err error
 	log.Debugf("Preparing patch job: %s", jobConfig.Name)
-	var ex Executor
-	ex.DefaultMissingKeysWithZero = jobConfig.DefaultMissingKeysWithZero
+
+	ex := Executor{
+		Job: jobConfig,
+	}
+
+	if len(ex.PatchExecutionMode) == 0 {
+		ex.PatchExecutionMode = defaultPatchExecutionMode
+	}
+	if _, ok := supportedPatchExecutionMode[ex.PatchExecutionMode]; !ok {
+		log.Fatalf("Unsupported Patch Execution Mode: %s", ex.PatchExecutionMode)
+	}
+
 	mapper := newRESTMapper()
 	for _, o := range jobConfig.Objects {
 		if o.APIVersion == "" {
@@ -85,9 +103,8 @@ func setupPatchJob(jobConfig config.Job) Executor {
 
 // RunPatchJob executes a patch job
 func (ex *Executor) RunPatchJob() {
-	var itemList *unstructured.UnstructuredList
+	objItemLists := make([]*unstructured.UnstructuredList, 0, len(ex.objects))
 	log.Infof("Running patch job %s", ex.Name)
-	var wg sync.WaitGroup
 	for _, obj := range ex.objects {
 
 		labelSelector := labels.Set(obj.labelSelector).String()
@@ -97,21 +114,65 @@ func (ex *Executor) RunPatchJob() {
 
 		// Try to find the list of resources by GroupVersionResource.
 		err := util.RetryWithExponentialBackOff(func() (done bool, err error) {
-			itemList, err = DynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
+			itemList, err := DynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
 			if err != nil {
 				log.Errorf("Error found listing %s labeled with %s: %s", obj.gvr.Resource, labelSelector, err)
 				return false, nil
 			}
+			log.Infof("Found %d %s with selector %s; patching them", len(itemList.Items), obj.gvr.Resource, labelSelector)
+			objItemLists = append(objItemLists, itemList)
 			return true, nil
 		}, 1*time.Second, 3, 0, ex.MaxWaitTimeout)
 		if err != nil {
 			continue
 		}
-		log.Infof("Found %d %s with selector %s; patching them", len(itemList.Items), obj.gvr.Resource, labelSelector)
-		for i := 0; i < ex.JobIterations; i++ {
+	}
+
+	switch ex.PatchExecutionMode {
+	case config.PatchExecutionModeParallel:
+		ex.runParallel(objItemLists)
+	case config.PatchExecutionModeSequential:
+		ex.runSequential(objItemLists)
+	}
+}
+
+func (ex *Executor) runSequential(objItemLists []*unstructured.UnstructuredList) {
+	for i := 0; i < ex.JobIterations; i++ {
+		for j, obj := range ex.objects {
+			itemList := objItemLists[j]
+			var wg sync.WaitGroup
 			for _, item := range itemList.Items {
 				wg.Add(1)
 				go ex.patchHandler(obj, item, i, &wg)
+			}
+			// Wait for all items in the object
+			wg.Wait()
+			waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
+			ex.waitForObjects("", waitRateLimiter)
+
+			// Wait between object
+			if ex.ObjectDelay > 0 {
+				log.Infof("Sleeping between objects for %v", ex.ObjectDelay)
+				time.Sleep(ex.ObjectDelay)
+			}
+		}
+		// Wait between job iterations
+		if ex.JobIterationDelay > 0 {
+			log.Infof("Sleeping between job iterations for %v", ex.JobIterationDelay)
+			time.Sleep(ex.JobIterationDelay)
+		}
+	}
+}
+
+// runParallel executes all objects for all jobs in parallel
+func (ex *Executor) runParallel(objItemLists []*unstructured.UnstructuredList) {
+	var wg sync.WaitGroup
+	for i, obj := range ex.objects {
+		itemList := objItemLists[i]
+		for j := 0; j < ex.JobIterations; j++ {
+			for _, item := range itemList.Items {
+				wg.Add(1)
+				go ex.patchHandler(obj, item, j, &wg)
 			}
 		}
 	}
