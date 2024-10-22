@@ -19,12 +19,10 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/kube-burner/kube-burner/pkg/config"
 	"github.com/kube-burner/kube-burner/pkg/util"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,10 +33,10 @@ import (
 )
 
 var (
-	defaultPatchExecutionMode   = config.PatchExecutionModeParallel
-	supportedPatchExecutionMode = map[config.PatchExecutionMode]struct{}{
-		config.PatchExecutionModeParallel:   {},
-		config.PatchExecutionModeSequential: {},
+	defaultPatchExecutionMode   = config.ExecutionModeParallel
+	supportedPatchExecutionMode = map[config.ExecutionMode]struct{}{
+		config.ExecutionModeParallel:   {},
+		config.ExecutionModeSequential: {},
 	}
 )
 
@@ -51,11 +49,11 @@ func setupPatchJob(jobConfig config.Job) Executor {
 		Job: jobConfig,
 	}
 
-	if len(ex.PatchExecutionMode) == 0 {
-		ex.PatchExecutionMode = defaultPatchExecutionMode
+	if len(ex.ExecutionMode) == 0 {
+		ex.ExecutionMode = defaultPatchExecutionMode
 	}
-	if _, ok := supportedPatchExecutionMode[ex.PatchExecutionMode]; !ok {
-		log.Fatalf("Unsupported Patch Execution Mode: %s", ex.PatchExecutionMode)
+	if _, ok := supportedPatchExecutionMode[ex.ExecutionMode]; !ok {
+		log.Fatalf("Unsupported Patch Execution Mode: %s", ex.ExecutionMode)
 	}
 
 	mapper := newRESTMapper()
@@ -103,82 +101,7 @@ func setupPatchJob(jobConfig config.Job) Executor {
 
 // RunPatchJob executes a patch job
 func (ex *Executor) RunPatchJob() {
-	objItemLists := make([]*unstructured.UnstructuredList, 0, len(ex.objects))
-	log.Infof("Running patch job %s", ex.Name)
-	for _, obj := range ex.objects {
-
-		labelSelector := labels.Set(obj.labelSelector).String()
-		listOptions := metav1.ListOptions{
-			LabelSelector: labelSelector,
-		}
-
-		// Try to find the list of resources by GroupVersionResource.
-		err := util.RetryWithExponentialBackOff(func() (done bool, err error) {
-			itemList, err := DynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
-			if err != nil {
-				log.Errorf("Error found listing %s labeled with %s: %s", obj.gvr.Resource, labelSelector, err)
-				return false, nil
-			}
-			log.Infof("Found %d %s with selector %s; patching them", len(itemList.Items), obj.gvr.Resource, labelSelector)
-			objItemLists = append(objItemLists, itemList)
-			return true, nil
-		}, 1*time.Second, 3, 0, ex.MaxWaitTimeout)
-		if err != nil {
-			continue
-		}
-	}
-
-	switch ex.PatchExecutionMode {
-	case config.PatchExecutionModeParallel:
-		ex.runParallel(objItemLists)
-	case config.PatchExecutionModeSequential:
-		ex.runSequential(objItemLists)
-	}
-}
-
-func (ex *Executor) runSequential(objItemLists []*unstructured.UnstructuredList) {
-	for i := 0; i < ex.JobIterations; i++ {
-		for j, obj := range ex.objects {
-			itemList := objItemLists[j]
-			var wg sync.WaitGroup
-			for _, item := range itemList.Items {
-				wg.Add(1)
-				go ex.patchHandler(obj, item, i, &wg)
-			}
-			// Wait for all items in the object
-			wg.Wait()
-			waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
-			ex.waitForObjects("", waitRateLimiter)
-
-			// Wait between object
-			if ex.ObjectDelay > 0 {
-				log.Infof("Sleeping between objects for %v", ex.ObjectDelay)
-				time.Sleep(ex.ObjectDelay)
-			}
-		}
-		// Wait between job iterations
-		if ex.JobIterationDelay > 0 {
-			log.Infof("Sleeping between job iterations for %v", ex.JobIterationDelay)
-			time.Sleep(ex.JobIterationDelay)
-		}
-	}
-}
-
-// runParallel executes all objects for all jobs in parallel
-func (ex *Executor) runParallel(objItemLists []*unstructured.UnstructuredList) {
-	var wg sync.WaitGroup
-	for i, obj := range ex.objects {
-		itemList := objItemLists[i]
-		for j := 0; j < ex.JobIterations; j++ {
-			for _, item := range itemList.Items {
-				wg.Add(1)
-				go ex.patchHandler(obj, item, j, &wg)
-			}
-		}
-	}
-	wg.Wait()
-	waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
-	ex.waitForObjects("", waitRateLimiter)
+	ex.runJob(ex.patchHandler)
 }
 
 func (ex *Executor) patchHandler(obj object, originalItem unstructured.Unstructured,
@@ -249,7 +172,7 @@ func (ex *Executor) patchHandler(obj object, originalItem unstructured.Unstructu
 	if err != nil {
 		if errors.IsForbidden(err) {
 			log.Fatalf("Authorization error patching %s/%s: %s", originalItem.GetKind(), originalItem.GetName(), err)
-		} else if err != nil {
+		} else {
 			log.Errorf("Error patching object %s/%s in namespace %s: %s", originalItem.GetKind(),
 				originalItem.GetName(), ns, err)
 		}
