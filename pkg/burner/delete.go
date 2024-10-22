@@ -31,8 +31,10 @@ import (
 )
 
 func setupDeleteJob(jobConfig config.Job) Executor {
-	var ex Executor
 	log.Debugf("Preparing delete job: %s", jobConfig.Name)
+	ex := Executor{
+		Job: jobConfig,
+	}
 	mapper := newRESTMapper()
 	for _, o := range jobConfig.Objects {
 		if o.APIVersion == "" {

@@ -44,7 +44,9 @@ func setupCreateJob(jobConfig config.Job) Executor {
 	var f io.Reader
 	mapper := newRESTMapper()
 	log.Debugf("Preparing create job: %s", jobConfig.Name)
-	ex := Executor{}
+	ex := Executor{
+		Job: jobConfig,
+	}
 	ex.DefaultMissingKeysWithZero = jobConfig.DefaultMissingKeysWithZero
 	for _, o := range jobConfig.Objects {
 		if o.Replicas < 1 {

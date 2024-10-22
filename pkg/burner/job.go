@@ -362,7 +362,6 @@ func newExecutorList(configSpec config.Spec, kubeClientProvider *config.KubeClie
 		}
 		// Limits the number of workers to QPS and Burst
 		ex.limiter = rate.NewLimiter(rate.Limit(job.QPS), job.Burst)
-		ex.Job = job
 		ex.uuid = uuid
 		ex.runid = configSpec.GlobalConfig.RUNID
 		executorList = append(executorList, ex)
