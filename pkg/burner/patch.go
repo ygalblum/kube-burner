@@ -32,14 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var (
-	defaultPatchExecutionMode   = config.ExecutionModeParallel
-	supportedPatchExecutionMode = map[config.ExecutionMode]struct{}{
-		config.ExecutionModeParallel:   {},
-		config.ExecutionModeSequential: {},
-	}
-)
-
 func setupPatchJob(jobConfig config.Job) Executor {
 	var f io.Reader
 	var err error
@@ -50,10 +42,10 @@ func setupPatchJob(jobConfig config.Job) Executor {
 	}
 
 	if len(ex.ExecutionMode) == 0 {
-		ex.ExecutionMode = defaultPatchExecutionMode
+		ex.ExecutionMode = config.ExecutionModeParallel
 	}
-	if _, ok := supportedPatchExecutionMode[ex.ExecutionMode]; !ok {
-		log.Fatalf("Unsupported Patch Execution Mode: %s", ex.ExecutionMode)
+	if _, ok := supportedExecutionMode[ex.ExecutionMode]; !ok {
+		log.Fatalf("Unsupported Execution Mode: %s", ex.ExecutionMode)
 	}
 
 	mapper := newRESTMapper()

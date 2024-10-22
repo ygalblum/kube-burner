@@ -79,12 +79,19 @@ const (
 	garbageCollectionJob = "garbage-collection"
 )
 
-var ClientSet kubernetes.Interface
-var DynamicClient dynamic.Interface
-var discoveryClient *discovery.DiscoveryClient
-var restConfig *rest.Config
-var embedFS embed.FS
-var embedFSDir string
+var (
+	ClientSet       kubernetes.Interface
+	DynamicClient   dynamic.Interface
+	discoveryClient *discovery.DiscoveryClient
+	restConfig      *rest.Config
+	embedFS         embed.FS
+	embedFSDir      string
+
+	supportedExecutionMode = map[config.ExecutionMode]struct{}{
+		config.ExecutionModeParallel:   {},
+		config.ExecutionModeSequential: {},
+	}
+)
 
 // Runs the with the given configuration and metrics scraper, with the specified timeout.
 // Returns:
