@@ -40,6 +40,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"kubevirt.io/client-go/kubecli"
 )
 
 type object struct {
@@ -56,10 +57,11 @@ type object struct {
 type Executor struct {
 	objects []object
 	config.Job
-	uuid       string
-	runid      string
-	limiter    *rate.Limiter
-	nsRequired bool
+	uuid           string
+	runid          string
+	limiter        *rate.Limiter
+	nsRequired     bool
+	kubeVirtClient kubecli.KubevirtClient
 }
 
 // returnPair is a pair of return codes for a job

@@ -17,20 +17,15 @@ package burner
 import (
 	"context"
 	"sync"
-	"time"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/time/rate"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	kubevirtV1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
 
 	"github.com/kube-burner/kube-burner/pkg/config"
-	"github.com/kube-burner/kube-burner/pkg/util"
 )
 
 var supportedOps = map[config.KubeVirtOpType]struct{}{
@@ -43,6 +38,7 @@ var supportedOps = map[config.KubeVirtOpType]struct{}{
 
 func setupKubeVirtJob(jobConfig config.Job) Executor {
 	var ex Executor
+	var err error
 	mapper := newRESTMapper()
 	for _, o := range jobConfig.Objects {
 		if len(o.LabelSelector) == 0 {
@@ -77,74 +73,47 @@ func setupKubeVirtJob(jobConfig config.Job) Executor {
 		}
 		ex.objects = append(ex.objects, obj)
 	}
+
+	ex.kubeVirtClient, err = kubecli.GetKubevirtClientFromRESTConfig(restConfig)
+	if err != nil {
+		log.Fatalf("Failed to get kubevirt client - %v", err)
+	}
+
 	return ex
 }
 
 func (ex *Executor) RunKubeVirtJob(restConfig *rest.Config) {
-	var itemList *unstructured.UnstructuredList
-	var wg sync.WaitGroup
-
-	virtClient, err := kubecli.GetKubevirtClientFromRESTConfig(restConfig)
-	if err != nil {
-		log.Error("Failed to create VirtCTL Client", err)
+	if ex.kubeVirtClient == nil {
+		log.Fatal("Run job was called without calling setup")
 	}
-
-	for _, obj := range ex.objects {
-
-		labelSelector := labels.Set(obj.LabelSelector).String()
-		listOptions := metav1.ListOptions{
-			LabelSelector: labelSelector,
-		}
-
-		// Try to find the list of resources by GroupVersionResource.
-		err := util.RetryWithExponentialBackOff(func() (done bool, err error) {
-			itemList, err = DynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
-			if err != nil {
-				log.Errorf("Error found listing %s labeled with %s: %s", obj.gvr.Resource, labelSelector, err)
-				return false, nil
-			}
-			return true, nil
-		}, 1*time.Second, 3, 0, ex.MaxWaitTimeout)
-		if err != nil {
-			continue
-		}
-		log.Infof("Found %d %s with selector %s; patching them", len(itemList.Items), obj.gvr.Resource, labelSelector)
-
-		for _, item := range itemList.Items {
-			wg.Add(1)
-			go ex.kubeOpHandler(virtClient, obj, item, &wg)
-		}
-	}
-	wg.Wait()
-	waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
-	ex.waitForObjects("", waitRateLimiter)
+	ex.runJob(ex.kubeOpHandler)
 }
 
-func (ex *Executor) kubeOpHandler(virtClient kubecli.KubevirtClient, obj object, item unstructured.Unstructured, wg *sync.WaitGroup) {
+func (ex *Executor) kubeOpHandler(obj object, item unstructured.Unstructured, iteration int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	var err error
 	switch obj.KubeVirtOp {
 	case config.KubeVirtOpStart:
-		err = virtClient.VirtualMachine(item.GetNamespace()).Start(context.Background(), item.GetName(), &kubevirtV1.StartOptions{Paused: false /*startPaused*/, DryRun: nil})
+		err = ex.kubeVirtClient.VirtualMachine(item.GetNamespace()).Start(context.Background(), item.GetName(), &kubevirtV1.StartOptions{Paused: false /*startPaused*/, DryRun: nil})
 	case config.KubeVirtOpStop:
 		stopOpts := &kubevirtV1.StopOptions{DryRun: nil}
 		// if forceRestart {
 		// 	stopOpts.GracePeriod = &gracePeriod
 		// 	errorFmt = "error force stopping VirtualMachine: %v"
 		// }
-		err = virtClient.VirtualMachine(item.GetNamespace()).Stop(context.Background(), item.GetName(), stopOpts)
+		err = ex.kubeVirtClient.VirtualMachine(item.GetNamespace()).Stop(context.Background(), item.GetName(), stopOpts)
 	case config.KubeVirtOpRestart:
 		restartOpts := &kubevirtV1.RestartOptions{DryRun: nil}
 		// if forceRestart {
 		// 	restartOpts.GracePeriodSeconds = &gracePeriod
 		// 	errorFmt = "error force restarting VirtualMachine: %v"
 		// }
-		err = virtClient.VirtualMachine(item.GetNamespace()).Restart(context.Background(), item.GetName(), restartOpts)
+		err = ex.kubeVirtClient.VirtualMachine(item.GetNamespace()).Restart(context.Background(), item.GetName(), restartOpts)
 	case config.KubeVirtOpPause:
-		err = virtClient.VirtualMachineInstance(item.GetNamespace()).Pause(context.Background(), item.GetName(), &kubevirtV1.PauseOptions{DryRun: nil})
+		err = ex.kubeVirtClient.VirtualMachineInstance(item.GetNamespace()).Pause(context.Background(), item.GetName(), &kubevirtV1.PauseOptions{DryRun: nil})
 	case config.KubeVirtOpUnpause:
-		err = virtClient.VirtualMachineInstance(item.GetNamespace()).Unpause(context.Background(), item.GetName(), &kubevirtV1.UnpauseOptions{DryRun: nil})
+		err = ex.kubeVirtClient.VirtualMachineInstance(item.GetNamespace()).Unpause(context.Background(), item.GetName(), &kubevirtV1.UnpauseOptions{DryRun: nil})
 	}
 
 	if err != nil {
@@ -152,5 +121,4 @@ func (ex *Executor) kubeOpHandler(virtClient kubecli.KubevirtClient, obj object,
 	} else {
 		log.Debugf("Successfully executed op [%s] on the VM [%s]", obj.KubeVirtOp, item.GetName())
 	}
-
 }
