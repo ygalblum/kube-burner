@@ -37,8 +37,21 @@ var supportedOps = map[config.KubeVirtOpType]struct{}{
 }
 
 func setupKubeVirtJob(jobConfig config.Job) Executor {
-	var ex Executor
 	var err error
+
+	ex := Executor{
+		Job: jobConfig,
+	}
+
+	if len(ex.ExecutionMode) == 0 {
+		ex.ExecutionMode = config.ExecutionModeSequential
+	}
+
+	ex.kubeVirtClient, err = kubecli.GetKubevirtClientFromRESTConfig(restConfig)
+	if err != nil {
+		log.Fatalf("Failed to get kubevirt client - %v", err)
+	}
+
 	mapper := newRESTMapper()
 	for _, o := range jobConfig.Objects {
 		if len(o.LabelSelector) == 0 {
@@ -72,11 +85,6 @@ func setupKubeVirtJob(jobConfig config.Job) Executor {
 			Object: o,
 		}
 		ex.objects = append(ex.objects, obj)
-	}
-
-	ex.kubeVirtClient, err = kubecli.GetKubevirtClientFromRESTConfig(restConfig)
-	if err != nil {
-		log.Fatalf("Failed to get kubevirt client - %v", err)
 	}
 
 	return ex
