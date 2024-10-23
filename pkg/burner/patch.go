@@ -81,11 +81,10 @@ func setupPatchJob(jobConfig config.Job) Executor {
 			gvr:           mapping.Resource,
 			objectSpec:    t,
 			Object:        o,
-			labelSelector: o.LabelSelector,
 			patchType:     o.PatchType,
 		}
 		obj.Namespaced = mapping.Scope.Name() == meta.RESTScopeNameNamespace
-		log.Infof("Job %s: Patch %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.labelSelector))
+		log.Infof("Job %s: Patch %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.LabelSelector))
 		ex.objects = append(ex.objects, obj)
 	}
 	return ex

@@ -50,10 +50,9 @@ func setupDeleteJob(jobConfig config.Job) Executor {
 		}
 		obj := object{
 			gvr:           mapping.Resource,
-			labelSelector: o.LabelSelector,
 		}
 		obj.Namespaced = mapping.Scope.Name() == meta.RESTScopeNameNamespace
-		log.Debugf("Job %s: Delete %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.labelSelector))
+		log.Debugf("Job %s: Delete %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.LabelSelector))
 		ex.objects = append(ex.objects, obj)
 	}
 	return ex
@@ -64,7 +63,7 @@ func (ex *Executor) RunDeleteJob() {
 	var wg sync.WaitGroup
 	var itemList *unstructured.UnstructuredList
 	for _, obj := range ex.objects {
-		labelSelector := labels.Set(obj.labelSelector).String()
+		labelSelector := labels.Set(obj.LabelSelector).String()
 		listOptions := metav1.ListOptions{
 			LabelSelector: labelSelector,
 		}
