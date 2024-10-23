@@ -46,7 +46,6 @@ import (
 type object struct {
 	gvr           schema.GroupVersionResource
 	objectSpec    []byte
-	labelSelector map[string]string
 	patchType     string
 	kind          string
 	namespace     string

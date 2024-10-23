@@ -173,7 +173,7 @@ func (ex *Executor) runJob(handler func(obj object, originalItem unstructured.Un
 func (ex *Executor) getItemsForObjects() []*unstructured.UnstructuredList {
 	objItemLists := make([]*unstructured.UnstructuredList, 0, len(ex.objects))
 	for _, obj := range ex.objects {
-		labelSelector := labels.Set(obj.labelSelector).String()
+		labelSelector := labels.Set(obj.LabelSelector).String()
 		listOptions := metav1.ListOptions{
 			LabelSelector: labelSelector,
 		}

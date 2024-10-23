@@ -48,10 +48,9 @@ func setupReadJob(jobConfig config.Job) Executor {
 		}
 		obj := object{
 			gvr:           mapping.Resource,
-			labelSelector: o.LabelSelector,
 		}
 		obj.Namespaced = mapping.Scope.Name() == meta.RESTScopeNameNamespace
-		log.Debugf("Job %s: Read %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.labelSelector))
+		log.Debugf("Job %s: Read %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.LabelSelector))
 		ex.objects = append(ex.objects, obj)
 	}
 	log.Infof("Job %s: %d iterations", jobConfig.Name, jobConfig.JobIterations)
@@ -74,7 +73,7 @@ func (ex *Executor) RunReadJob(iterationStart, iterationEnd int) {
 		}
 		log.Debugf("Reading object from iteration %d", i)
 		for _, obj := range ex.objects {
-			labelSelector := labels.Set(obj.labelSelector).String()
+			labelSelector := labels.Set(obj.LabelSelector).String()
 			listOptions := metav1.ListOptions{
 				LabelSelector: labelSelector,
 			}
