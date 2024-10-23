@@ -43,11 +43,11 @@ import (
 )
 
 type object struct {
-	gvr           schema.GroupVersionResource
-	objectSpec    []byte
-	patchType     string
-	kind          string
-	namespace     string
+	gvr        schema.GroupVersionResource
+	objectSpec []byte
+	patchType  string
+	kind       string
+	namespace  string
 	config.Object
 }
 

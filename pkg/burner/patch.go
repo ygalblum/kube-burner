@@ -78,10 +78,10 @@ func setupPatchJob(jobConfig config.Job) Executor {
 			log.Fatalln("Empty Patch Type not allowed")
 		}
 		obj := object{
-			gvr:           mapping.Resource,
-			objectSpec:    t,
-			Object:        o,
-			patchType:     o.PatchType,
+			gvr:        mapping.Resource,
+			objectSpec: t,
+			Object:     o,
+			patchType:  o.PatchType,
 		}
 		obj.Namespaced = mapping.Scope.Name() == meta.RESTScopeNameNamespace
 		log.Infof("Job %s: Patch %s with selector %s", jobConfig.Name, gvk.Kind, labels.Set(obj.LabelSelector))
@@ -92,7 +92,7 @@ func setupPatchJob(jobConfig config.Job) Executor {
 
 // RunPatchJob executes a patch job
 func (ex *Executor) RunPatchJob() {
-	ex.runJob(ex.patchHandler)
+	ex.runJob(ex.patchHandler, nil)
 }
 
 func (ex *Executor) patchHandler(obj object, originalItem unstructured.Unstructured,

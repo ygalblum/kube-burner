@@ -39,6 +39,9 @@ import (
 	"github.com/kube-burner/kube-burner/pkg/util"
 )
 
+type ItemHandler func(obj object, originalItem unstructured.Unstructured, iteration int, wg *sync.WaitGroup)
+type ObjectFinalizer func(obj object)
+
 const (
 	objectLimit = 500
 )
@@ -160,13 +163,13 @@ func newRESTMapper() meta.RESTMapper {
 	return restmapper.NewDiscoveryRESTMapper(apiGroupResouces)
 }
 
-func (ex *Executor) runJob(handler func(obj object, originalItem unstructured.Unstructured, iteration int, wg *sync.WaitGroup)) {
+func (ex *Executor) runJob(itemHandler ItemHandler, objectFinalizer ObjectFinalizer) {
 	objItemLists := ex.getItemsForObjects()
 	switch ex.ExecutionMode {
 	case config.ExecutionModeParallel:
-		ex.runParallel(objItemLists, handler)
+		ex.runParallel(objItemLists, itemHandler)
 	case config.ExecutionModeSequential:
-		ex.runSequential(objItemLists, handler)
+		ex.runSequential(objItemLists, itemHandler, objectFinalizer)
 	}
 }
 
@@ -198,22 +201,23 @@ func (ex *Executor) getItemsForObjects() []*unstructured.UnstructuredList {
 	return objItemLists
 }
 
-func (ex *Executor) runSequential(
-	objItemLists []*unstructured.UnstructuredList,
-	handler func(obj object, originalItem unstructured.Unstructured, iteration int, wg *sync.WaitGroup)) {
+func (ex *Executor) runSequential(objItemLists []*unstructured.UnstructuredList, itemHandler ItemHandler, objectFinalizer ObjectFinalizer) {
 	for i := 0; i < ex.JobIterations; i++ {
 		for j, obj := range ex.objects {
 			itemList := objItemLists[j]
 			var wg sync.WaitGroup
 			for _, item := range itemList.Items {
 				wg.Add(1)
-				go handler(obj, item, i, &wg)
+				go itemHandler(obj, item, i, &wg)
 			}
 			// Wait for all items in the object
 			wg.Wait()
 			waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
 			ex.waitForObjects("", waitRateLimiter)
 
+			if objectFinalizer != nil {
+				objectFinalizer(obj)
+			}
 			// Wait between object
 			if ex.ObjectDelay > 0 {
 				log.Infof("Sleeping between objects for %v", ex.ObjectDelay)
@@ -229,16 +233,14 @@ func (ex *Executor) runSequential(
 }
 
 // runParallel executes all objects for all jobs in parallel
-func (ex *Executor) runParallel(
-	objItemLists []*unstructured.UnstructuredList,
-	handler func(obj object, originalItem unstructured.Unstructured, iteration int, wg *sync.WaitGroup)) {
+func (ex *Executor) runParallel(objItemLists []*unstructured.UnstructuredList, itemHandler ItemHandler) {
 	var wg sync.WaitGroup
 	for i, obj := range ex.objects {
 		itemList := objItemLists[i]
 		for j := 0; j < ex.JobIterations; j++ {
 			for _, item := range itemList.Items {
 				wg.Add(1)
-				go handler(obj, item, j, &wg)
+				go itemHandler(obj, item, j, &wg)
 			}
 		}
 	}
