@@ -18,7 +18,7 @@ setup_file() {
   setup-kind
   create_test_kubeconfig
   setup-prometheus
-  setup-elastic
+  setup-opensearch
 }
 
 setup() {
@@ -39,7 +39,7 @@ teardown() {
 teardown_file() {
   destroy-kind
   $OCI_BIN rm -f prometheus
-  $OCI_BIN rm -f elastic
+  $OCI_BIN rm -f opensearch
 }
 
 @test "kube-burner init: churn=true" {

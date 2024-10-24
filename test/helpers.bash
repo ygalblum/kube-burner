@@ -8,11 +8,14 @@ OCI_BIN=${OCI_BIN:-podman}
 ARCH=$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
 KUBE_BURNER=${KUBE_BURNER:-kube-burner}
 ES_SERVER=${PERFSCALE_PROD_ES_SERVER:-"http://localhost:9200"}
+<<<<<<< Updated upstream
 # Assume the OS is linux unless OSTYPE has darwin
 OS=linux
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS=darwin
 fi
+=======
+>>>>>>> Stashed changes
 
 setup-kind() {
   KIND_FOLDER=$(mktemp -d)
@@ -55,9 +58,10 @@ setup-prometheus() {
   sleep 10
 }
 
-setup-elastic() {
-  echo "Setting up elastic"
-  $OCI_BIN run --rm -d --name elastic --network=host --env="discovery.type=single-node" --env="ES_JAVA_OPTS=-Xms512m -Xmx512m" --publish=9090:9200 docker.io/library/elasticsearch:8.15.3
+setup-opensearch() {
+  echo "Setting up open-search"
+  # Use version 1 to avoid the password requirement
+  $OCI_BIN run --rm -d --name opensearch --env="discovery.type=single-node" --env="plugins.security.disabled=true" --network=host docker.io/opensearchproject/opensearch:1
   sleep 10
 }
 
