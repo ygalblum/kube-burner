@@ -77,4 +77,4 @@ manifest-build:
 test: lint test-k8s
 
 test-k8s:
-	cd test && bats -F pretty -T --print-output-on-failure test-k8s.bats
+	cd test && KUBE_BURNER=$(CURDIR)/$(BIN_PATH) bats -F pretty -T --print-output-on-failure test-k8s.bats

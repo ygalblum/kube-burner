@@ -6,6 +6,8 @@ KIND_VERSION=${KIND_VERSION:-v0.19.0}
 K8S_VERSION=${K8S_VERSION:-v1.27.0}
 OCI_BIN=${OCI_BIN:-podman}
 ARCH=$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+KUBE_BURNER=${KUBE_BURNER:-kube-burner}
+ES_SERVER=${PERFSCALE_PROD_ES_SERVER:-"http://localhost:9200"}
 
 setup-kind() {
   KIND_FOLDER=$(mktemp -d)
@@ -45,6 +47,12 @@ destroy-kind() {
 setup-prometheus() {
   echo "Setting up prometheus instance"
   $OCI_BIN run --rm -d --name prometheus --network=host docker.io/prom/prometheus:latest
+  sleep 10
+}
+
+setup-elastic() {
+  echo "Setting up elastic"
+  $OCI_BIN run --rm -d --name elastic --network=host --env="discovery.type=single-node" --env="ES_JAVA_OPTS=-Xms512m -Xmx512m" --publish=9090:9200 docker.io/library/elasticsearch:8.15.3
   sleep 10
 }
 
