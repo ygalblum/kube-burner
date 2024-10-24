@@ -8,14 +8,11 @@ OCI_BIN=${OCI_BIN:-podman}
 ARCH=$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
 KUBE_BURNER=${KUBE_BURNER:-kube-burner}
 ES_SERVER=${PERFSCALE_PROD_ES_SERVER:-"http://localhost:9200"}
-<<<<<<< Updated upstream
 # Assume the OS is linux unless OSTYPE has darwin
 OS=linux
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS=darwin
 fi
-=======
->>>>>>> Stashed changes
 
 setup-kind() {
   KIND_FOLDER=$(mktemp -d)
