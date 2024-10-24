@@ -23,7 +23,7 @@ setup_file() {
 
 setup() {
   export UUID; UUID=$(uuidgen)
-  export ES_SERVER; ES_SERVER=${ES_SERVER}
+  export ES_SERVER; ES_SERVER=${PERFSCALE_PROD_ES_SERVER}
   export ES_INDEX="kube-burner"
   export METRICS_FOLDER="metrics-${UUID}"
   export ES_INDEXING=""
