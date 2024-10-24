@@ -51,14 +51,14 @@ destroy-kind() {
 
 setup-prometheus() {
   echo "Setting up prometheus instance"
-  $OCI_BIN run --rm -d --name prometheus --network=host docker.io/prom/prometheus:latest
+  $OCI_BIN run --rm -d --name prometheus --publish=9090:9090 docker.io/prom/prometheus:latest
   sleep 10
 }
 
 setup-opensearch() {
   echo "Setting up open-search"
   # Use version 1 to avoid the password requirement
-  $OCI_BIN run --rm -d --name opensearch --env="discovery.type=single-node" --env="plugins.security.disabled=true" --network=host docker.io/opensearchproject/opensearch:1
+  $OCI_BIN run --rm -d --name opensearch --env="discovery.type=single-node" --env="plugins.security.disabled=true" --publish=9200:9200 docker.io/opensearchproject/opensearch:1
   sleep 10
 }
 
