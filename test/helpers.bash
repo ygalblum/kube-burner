@@ -8,6 +8,11 @@ OCI_BIN=${OCI_BIN:-podman}
 ARCH=$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
 KUBE_BURNER=${KUBE_BURNER:-kube-burner}
 ES_SERVER=${PERFSCALE_PROD_ES_SERVER:-"http://localhost:9200"}
+# Assume the OS is linux unless OSTYPE has darwin
+OS=linux
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    OS=darwin
+fi
 
 setup-kind() {
   KIND_FOLDER=$(mktemp -d)
@@ -19,12 +24,12 @@ setup-kind() {
     make -C kind/ install INSTALL_DIR="${KIND_FOLDER}" KIND_BINARY_NAME="kind-linux-${ARCH}"
     IMAGE=quay.io/powercloud/kind-node:"${K8S_VERSION}"
   else
-    curl -LsS https://github.com/kubernetes-sigs/kind/releases/download/"${KIND_VERSION}/kind-linux-${ARCH}" -o ${KIND_FOLDER}/kind-linux-${ARCH}
-    chmod +x ${KIND_FOLDER}/kind-linux-${ARCH}
+    curl -LsS https://github.com/kubernetes-sigs/kind/releases/download/"${KIND_VERSION}/kind-${OS}-${ARCH}" -o ${KIND_FOLDER}/kind-${OS}-${ARCH}
+    chmod +x ${KIND_FOLDER}/kind-${OS}-${ARCH}
     IMAGE=kindest/node:"${K8S_VERSION}"
   fi
   echo "Deploying cluster"
-  "${KIND_FOLDER}/kind-linux-${ARCH}" create cluster --config kind.yml --image ${IMAGE} --name kind --wait 300s -v=1
+  "${KIND_FOLDER}/kind-${OS}-${ARCH}" create cluster --config kind.yml --image ${IMAGE} --name kind --wait 300s -v=1
   echo "Deploying kubevirt operator"
   KUBEVIRT_VERSION=$(curl -s https://api.github.com/repos/kubevirt/kubevirt/releases/latest | jq -r .tag_name)
   kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/"${KUBEVIRT_VERSION}"/kubevirt-operator.yaml
@@ -35,13 +40,13 @@ setup-kind() {
 
 create_test_kubeconfig() {
   echo "Creating another kubeconfig"
-  "${KIND_FOLDER}/kind-linux-${ARCH}" export kubeconfig --kubeconfig "${TEST_KUBECONFIG}"
+  "${KIND_FOLDER}/kind-${OS}-${ARCH}" export kubeconfig --kubeconfig "${TEST_KUBECONFIG}"
   kubectl config rename-context kind-kind "${TEST_KUBECONTEXT}" --kubeconfig "${TEST_KUBECONFIG}"
 }
 
 destroy-kind() {
   echo "Destroying kind cluster"
-  "${KIND_FOLDER}/kind-linux-${ARCH}" delete cluster
+  "${KIND_FOLDER}/kind-${OS}-${ARCH}" delete cluster
 }
 
 setup-prometheus() {
