@@ -8,6 +8,7 @@ spec:
   certificateRotateStrategy: {}
   configuration:
     developerConfiguration:
+      useEmulation: true
       featureGates:
         - Root
   customizeComponents: {}
