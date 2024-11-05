@@ -21,6 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/discovery"
 )
 
 // Executor contains the information required to execute a job
@@ -38,7 +39,7 @@ type Executor struct {
 	objectFinalizer ObjectFinalizer
 }
 
-func newExecutor(configSpec config.Spec, job config.Job) *Executor {
+func newExecutor(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, job config.Job) *Executor {
 	ex := &Executor{
 		Job:     job,
 		limiter: rate.NewLimiter(rate.Limit(job.QPS), job.Burst),
@@ -46,15 +47,18 @@ func newExecutor(configSpec config.Spec, job config.Job) *Executor {
 		runid:   configSpec.GlobalConfig.RUNID,
 	}
 
+	_, restConfig := kubeClientProvider.ClientSet(100, 100) // Hardcoded QPS/Burst
+	mapper := newRESTMapper(discovery.NewDiscoveryClientForConfigOrDie(restConfig))
+
 	switch job.JobType {
 	case config.CreationJob:
-		setupCreateJob(ex, configSpec)
+		setupCreateJob(ex, configSpec, mapper)
 	case config.DeletionJob:
-		setupDeleteJob(ex)
+		setupDeleteJob(ex, mapper)
 	case config.PatchJob:
-		setupPatchJob(ex)
+		setupPatchJob(ex, mapper)
 	case config.ReadJob:
-		setupReadJob(ex)
+		setupReadJob(ex, mapper)
 	default:
 		log.Fatalf("Unknown jobType: %s", job.JobType)
 	}

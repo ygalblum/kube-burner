@@ -23,13 +23,14 @@ import (
 	"github.com/kube-burner/kube-burner/pkg/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func setupPatchJob(ex *Executor) {
+func setupPatchJob(ex *Executor, mapper meta.RESTMapper) {
 	log.Debugf("Preparing %s job: %s", ex.JobType, ex.Name)
 
 	ex.itemHandler = patchHandler
@@ -41,7 +42,6 @@ func setupPatchJob(ex *Executor) {
 		log.Fatalf("Unsupported Execution Mode: %s", ex.ExecutionMode)
 	}
 
-	mapper := newRESTMapper()
 	for _, o := range ex.Objects {
 		if len(o.PatchType) == 0 {
 			log.Fatalln("Empty Patch Type not allowed")

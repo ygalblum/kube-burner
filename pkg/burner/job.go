@@ -34,7 +34,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -58,10 +57,9 @@ const (
 )
 
 var (
-	ClientSet       kubernetes.Interface
-	DynamicClient   dynamic.Interface
-	discoveryClient *discovery.DiscoveryClient
-	restConfig      *rest.Config
+	ClientSet     kubernetes.Interface
+	DynamicClient dynamic.Interface
+	restConfig    *rest.Config
 
 	supportedExecutionMode = map[config.ExecutionMode]struct{}{
 		config.ExecutionModeParallel:   {},
@@ -104,7 +102,6 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 		for jobPosition, job := range jobList {
 			var waitListNamespaces []string
 			ClientSet, restConfig = kubeClientProvider.ClientSet(job.QPS, job.Burst)
-			discoveryClient = discovery.NewDiscoveryClientForConfigOrDie(restConfig)
 			DynamicClient = dynamic.NewForConfigOrDie(restConfig)
 			currentJob := prometheus.Job{
 				Start:     time.Now().UTC(),
@@ -318,11 +315,9 @@ func verifyJobDefaults(job *config.Job, defaultTimeout time.Duration) {
 // newExecutorList Returns a list of executors
 func newExecutorList(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, defaultTimeout time.Duration) []*Executor {
 	var executorList []*Executor
-	_, restConfig = kubeClientProvider.ClientSet(100, 100) // Hardcoded QPS/Burst
-	discoveryClient = discovery.NewDiscoveryClientForConfigOrDie(restConfig)
 	for _, job := range configSpec.Jobs {
 		verifyJobDefaults(&job, defaultTimeout)
-		executorList = append(executorList, newExecutor(configSpec, job))
+		executorList = append(executorList, newExecutor(configSpec, kubeClientProvider, job))
 	}
 	return executorList
 }
