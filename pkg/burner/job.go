@@ -17,7 +17,6 @@ package burner
 import (
 	"bytes"
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -63,8 +62,6 @@ var (
 	DynamicClient   dynamic.Interface
 	discoveryClient *discovery.DiscoveryClient
 	restConfig      *rest.Config
-	embedFS         embed.FS
-	embedFSDir      string
 
 	supportedExecutionMode = map[config.ExecutionMode]struct{}{
 		config.ExecutionModeParallel:   {},
@@ -83,8 +80,6 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 	var rc int
 	var executedJobs []prometheus.Job
 	var msWg, gcWg sync.WaitGroup
-	embedFS = configSpec.EmbedFS
-	embedFSDir = configSpec.EmbedFSDir
 	errs := []error{}
 	res := make(chan int, 1)
 	uuid := configSpec.GlobalConfig.UUID
@@ -327,7 +322,7 @@ func newExecutorList(configSpec config.Spec, kubeClientProvider *config.KubeClie
 	discoveryClient = discovery.NewDiscoveryClientForConfigOrDie(restConfig)
 	for _, job := range configSpec.Jobs {
 		verifyJobDefaults(&job, defaultTimeout)
-		executorList = append(executorList, newExecutor(job, configSpec.GlobalConfig.UUID, configSpec.GlobalConfig.RUNID))
+		executorList = append(executorList, newExecutor(configSpec, job))
 	}
 	return executorList
 }

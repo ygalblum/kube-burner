@@ -29,6 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 
+	"github.com/kube-burner/kube-burner/pkg/config"
 	"github.com/kube-burner/kube-burner/pkg/util"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -38,7 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func setupCreateJob(ex *Executor) {
+func setupCreateJob(ex *Executor, configSpec config.Spec) {
 	var err error
 	var f io.Reader
 	mapper := newRESTMapper()
@@ -51,11 +52,11 @@ func setupCreateJob(ex *Executor) {
 		}
 		log.Debugf("Rendering template: %s", o.ObjectTemplate)
 		e := embed.FS{}
-		if embedFS == e {
+		if configSpec.EmbedFS == e {
 			f, err = util.ReadConfig(o.ObjectTemplate)
 		} else {
-			objectTemplate := path.Join(embedFSDir, o.ObjectTemplate)
-			f, err = util.ReadEmbedConfig(embedFS, objectTemplate)
+			objectTemplate := path.Join(configSpec.EmbedFSDir, o.ObjectTemplate)
+			f, err = util.ReadEmbedConfig(configSpec.EmbedFS, objectTemplate)
 		}
 		if err != nil {
 			log.Fatalf("Error reading template %s: %s", o.ObjectTemplate, err)
