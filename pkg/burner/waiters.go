@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/kube-burner/kube-burner/pkg/burner/types"
 )
@@ -55,17 +56,17 @@ func (ex *Executor) waitForObjects(ns string, limiter *rate.Limiter) {
 			}
 			switch kind {
 			case Deployment:
-				waitForDeployments(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForDeployments(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case ReplicaSet:
-				waitForRS(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForRS(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case ReplicationController:
-				waitForRC(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForRC(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case StatefulSet:
-				waitForStatefulSet(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForStatefulSet(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case DaemonSet:
-				waitForDS(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForDS(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case Pod:
-				waitForPod(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForPod(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case Build, BuildConfig:
 				waitForBuild(waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case VirtualMachine:
@@ -77,18 +78,18 @@ func (ex *Executor) waitForObjects(ns string, limiter *rate.Limiter) {
 			case Job:
 				waitForJob(waitNs, ex.MaxWaitTimeout, obj, limiter)
 			case PersistentVolumeClaim:
-				waitForPVC(waitNs, ex.MaxWaitTimeout, obj, limiter)
+				waitForPVC(ex.clientSet, waitNs, ex.MaxWaitTimeout, obj, limiter)
 			}
 		}
 	}
 	log.Infof("Actions in namespace %v completed", ns)
 }
 
-func waitForDeployments(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForDeployments(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	// TODO handle errors such as timeouts
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		deps, err := ClientSet.AppsV1().Deployments(ns).List(context.TODO(), metav1.ListOptions{
+		deps, err := clientSet.AppsV1().Deployments(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -104,10 +105,10 @@ func waitForDeployments(ns string, maxWaitTimeout time.Duration, obj object, lim
 	})
 }
 
-func waitForRS(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForRS(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		rss, err := ClientSet.AppsV1().ReplicaSets(ns).List(context.TODO(), metav1.ListOptions{
+		rss, err := clientSet.AppsV1().ReplicaSets(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -123,10 +124,10 @@ func waitForRS(ns string, maxWaitTimeout time.Duration, obj object, limiter *rat
 	})
 }
 
-func waitForStatefulSet(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForStatefulSet(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		stss, err := ClientSet.AppsV1().StatefulSets(ns).List(context.TODO(), metav1.ListOptions{
+		stss, err := clientSet.AppsV1().StatefulSets(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -142,10 +143,10 @@ func waitForStatefulSet(ns string, maxWaitTimeout time.Duration, obj object, lim
 	})
 }
 
-func waitForPVC(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForPVC(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		pvcs, err := ClientSet.CoreV1().PersistentVolumeClaims(ns).List(context.TODO(), metav1.ListOptions{
+		pvcs, err := clientSet.CoreV1().PersistentVolumeClaims(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -161,10 +162,10 @@ func waitForPVC(ns string, maxWaitTimeout time.Duration, obj object, limiter *ra
 	})
 }
 
-func waitForRC(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForRC(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		rcs, err := ClientSet.CoreV1().ReplicationControllers(ns).List(context.TODO(), metav1.ListOptions{
+		rcs, err := clientSet.CoreV1().ReplicationControllers(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -180,10 +181,10 @@ func waitForRC(ns string, maxWaitTimeout time.Duration, obj object, limiter *rat
 	})
 }
 
-func waitForDS(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForDS(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		limiter.Wait(context.TODO())
-		dss, err := ClientSet.AppsV1().DaemonSets(ns).List(context.TODO(), metav1.ListOptions{
+		dss, err := clientSet.AppsV1().DaemonSets(ns).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: labels.Set(obj.WaitOptions.LabelSelector).String(),
 		})
 		if err != nil {
@@ -199,7 +200,7 @@ func waitForDS(ns string, maxWaitTimeout time.Duration, obj object, limiter *rat
 	})
 }
 
-func waitForPod(ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
+func waitForPod(clientSet kubernetes.Interface, ns string, maxWaitTimeout time.Duration, obj object, limiter *rate.Limiter) {
 	wait.PollUntilContextTimeout(context.TODO(), time.Second, maxWaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		// We need to paginate these requests to ensure we don't miss any pods
 		listOptions := metav1.ListOptions{
@@ -208,7 +209,7 @@ func waitForPod(ns string, maxWaitTimeout time.Duration, obj object, limiter *ra
 		}
 		for {
 			limiter.Wait(context.TODO())
-			pods, err := ClientSet.CoreV1().Pods(ns).List(context.TODO(), listOptions)
+			pods, err := clientSet.CoreV1().Pods(ns).List(context.TODO(), listOptions)
 			listOptions.Continue = pods.GetContinue()
 			for _, pod := range pods.Items {
 				if pod.Status.Phase != corev1.PodRunning {

@@ -35,7 +35,6 @@ import (
 	"golang.org/x/time/rate"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -57,9 +56,7 @@ const (
 )
 
 var (
-	ClientSet     kubernetes.Interface
 	DynamicClient dynamic.Interface
-	restConfig    *rest.Config
 
 	supportedExecutionMode = map[config.ExecutionMode]struct{}{
 		config.ExecutionModeParallel:   {},
@@ -94,8 +91,7 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 		// Iterate job list
 		for jobPosition, job := range jobList {
 			var waitListNamespaces []string
-			ClientSet, restConfig = kubeClientProvider.ClientSet(job.QPS, job.Burst)
-			DynamicClient = dynamic.NewForConfigOrDie(restConfig)
+			DynamicClient = dynamic.NewForConfigOrDie(job.restConfig)
 			currentJob := prometheus.Job{
 				Start:     time.Now().UTC(),
 				JobConfig: job.Job,
@@ -334,12 +330,12 @@ func runWaitList(globalWaitMap map[string][]string, executorMap map[string]*Exec
 		executor := executorMap[executorUUID]
 		log.Infof("Waiting up to %s for actions to be completed", executor.MaxWaitTimeout)
 		// This semaphore is used to limit the maximum number of concurrent goroutines
-		sem := make(chan int, int(restConfig.QPS))
+		sem := make(chan int, int(executor.restConfig.QPS))
 		for _, ns := range namespaces {
 			sem <- 1
 			wg.Add(1)
 			go func(ns string) {
-				executor.waitForObjects(ns, rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst))
+				executor.waitForObjects(ns, rate.NewLimiter(rate.Limit(executor.restConfig.QPS), executor.restConfig.Burst))
 				<-sem
 				wg.Done()
 			}(ns)
@@ -352,7 +348,7 @@ func garbageCollectJob(ctx context.Context, jobExecutor *Executor, labelSelector
 	if wg != nil {
 		defer wg.Done()
 	}
-	util.CleanupNamespaces(ctx, ClientSet, labelSelector)
+	util.CleanupNamespaces(ctx, jobExecutor.clientSet, labelSelector)
 	for _, obj := range jobExecutor.objects {
 		jobExecutor.limiter.Wait(ctx)
 		if !obj.Namespaced {

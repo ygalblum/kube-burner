@@ -207,7 +207,7 @@ func (ex *Executor) runSequential() {
 			}
 			// Wait for all items in the object
 			wg.Wait()
-			waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
+			waitRateLimiter := rate.NewLimiter(rate.Limit(ex.restConfig.QPS), ex.restConfig.Burst)
 			ex.waitForObjects("", waitRateLimiter)
 
 			if ex.objectFinalizer != nil {
@@ -250,6 +250,6 @@ func (ex *Executor) runParallel() {
 		}
 	}
 	wg.Wait()
-	waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
+	waitRateLimiter := rate.NewLimiter(rate.Limit(ex.restConfig.QPS), ex.restConfig.Burst)
 	ex.waitForObjects("", waitRateLimiter)
 }

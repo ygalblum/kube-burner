@@ -94,7 +94,7 @@ func setupCreateJob(ex *Executor, configSpec config.Spec, mapper meta.RESTMapper
 
 // RunCreateJob executes a creation job
 func (ex *Executor) RunCreateJob(iterationStart, iterationEnd int, waitListNamespaces *[]string) {
-	waitRateLimiter := rate.NewLimiter(rate.Limit(restConfig.QPS), restConfig.Burst)
+	waitRateLimiter := rate.NewLimiter(rate.Limit(ex.restConfig.QPS), ex.restConfig.Burst)
 	nsAnnotations := make(map[string]string)
 	nsLabels := map[string]string{
 		"kube-burner-job":   ex.Name,
@@ -112,7 +112,7 @@ func (ex *Executor) RunCreateJob(iterationStart, iterationEnd int, waitListNames
 	}
 	if ex.nsRequired && !ex.NamespacedIterations {
 		ns = ex.Namespace
-		if err = util.CreateNamespace(ClientSet, ns, nsLabels, nsAnnotations); err != nil {
+		if err = util.CreateNamespace(ex.clientSet, ns, nsLabels, nsAnnotations); err != nil {
 			log.Fatal(err.Error())
 		}
 		*waitListNamespaces = append(*waitListNamespaces, ns)
@@ -131,7 +131,7 @@ func (ex *Executor) RunCreateJob(iterationStart, iterationEnd int, waitListNames
 		if ex.nsRequired && ex.NamespacedIterations {
 			ns = ex.generateNamespace(i)
 			if !namespacesCreated[ns] {
-				if err = util.CreateNamespace(ClientSet, ns, nsLabels, nsAnnotations); err != nil {
+				if err = util.CreateNamespace(ex.clientSet, ns, nsLabels, nsAnnotations); err != nil {
 					log.Error(err.Error())
 					continue
 				}
@@ -175,7 +175,7 @@ func (ex *Executor) RunCreateJob(iterationStart, iterationEnd int, waitListNames
 	if ex.WaitWhenFinished {
 		log.Infof("Waiting up to %s for actions to be completed", ex.MaxWaitTimeout)
 		// This semaphore is used to limit the maximum number of concurrent goroutines
-		sem := make(chan int, int(restConfig.QPS))
+		sem := make(chan int, int(ex.restConfig.QPS))
 		for i := iterationStart; i < iterationEnd; i++ {
 			if ex.nsRequired && ex.NamespacedIterations {
 				ns = ex.generateNamespace(i)
@@ -358,7 +358,7 @@ func (ex *Executor) RunCreateJobWithChurn() {
 				continue
 			}
 			// Label namespaces to be deleted
-			_, err = ClientSet.CoreV1().Namespaces().Patch(context.TODO(), ns, types.JSONPatchType, delPatch, metav1.PatchOptions{})
+			_, err = ex.clientSet.CoreV1().Namespaces().Patch(context.TODO(), ns, types.JSONPatchType, delPatch, metav1.PatchOptions{})
 			if err != nil {
 				log.Errorf("Error patching namespace %s. Error: %v", ns, err)
 			}
@@ -372,7 +372,7 @@ func (ex *Executor) RunCreateJobWithChurn() {
 		if ex.ChurnDeletionStrategy == "gvr" {
 			CleanupNamespacesUsingGVR(ctx, *ex, namespacesToDelete)
 		}
-		util.CleanupNamespaces(ctx, ClientSet, "churndelete=delete")
+		util.CleanupNamespaces(ctx, ex.clientSet, "churndelete=delete")
 		log.Info("Re-creating deleted objects")
 		// Re-create objects that were deleted
 		ex.RunCreateJob(randStart, numToChurn+randStart, &[]string{})
