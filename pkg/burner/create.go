@@ -260,7 +260,7 @@ func (ex *Executor) replicaHandler(labels map[string]string, obj object, ns stri
 				if !obj.Namespaced {
 					n = ""
 				}
-				createRequest(obj.gvr, n, newObject, ex.MaxWaitTimeout)
+				ex.createRequest(obj.gvr, n, newObject, ex.MaxWaitTimeout)
 				replicaWg.Done()
 			}(ns)
 		}(r)
@@ -268,7 +268,7 @@ func (ex *Executor) replicaHandler(labels map[string]string, obj object, ns stri
 	wg.Wait()
 }
 
-func createRequest(gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured, timeout time.Duration) {
+func (ex *Executor) createRequest(gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured, timeout time.Duration) {
 	var uns *unstructured.Unstructured
 	var err error
 	util.RetryWithExponentialBackOff(func() (bool, error) {
@@ -277,9 +277,9 @@ func createRequest(gvr schema.GroupVersionResource, ns string, obj *unstructured
 			ns = objNs
 		}
 		if ns != "" {
-			uns, err = DynamicClient.Resource(gvr).Namespace(ns).Create(context.TODO(), obj, metav1.CreateOptions{})
+			uns, err = ex.dynamicClient.Resource(gvr).Namespace(ns).Create(context.TODO(), obj, metav1.CreateOptions{})
 		} else {
-			uns, err = DynamicClient.Resource(gvr).Create(context.TODO(), obj, metav1.CreateOptions{})
+			uns, err = ex.dynamicClient.Resource(gvr).Create(context.TODO(), obj, metav1.CreateOptions{})
 		}
 		if err != nil {
 			if kerrors.IsUnauthorized(err) {
@@ -370,7 +370,7 @@ func (ex *Executor) RunCreateJobWithChurn() {
 		defer cancel()
 		// Cleanup namespaces based on the labels we added
 		if ex.ChurnDeletionStrategy == "gvr" {
-			CleanupNamespacesUsingGVR(ctx, *ex, namespacesToDelete)
+			CleanupNamespacesUsingGVR(ctx, ex, namespacesToDelete)
 		}
 		util.CleanupNamespaces(ctx, ex.clientSet, "churndelete=delete")
 		log.Info("Re-creating deleted objects")

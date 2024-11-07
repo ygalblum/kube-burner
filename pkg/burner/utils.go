@@ -106,7 +106,7 @@ func (ex *Executor) Verify() bool {
 		err := util.RetryWithExponentialBackOff(func() (done bool, err error) {
 			replicas = 0
 			for {
-				objList, err = DynamicClient.Resource(obj.gvr).Namespace(metav1.NamespaceAll).List(context.TODO(), listOptions)
+				objList, err = ex.dynamicClient.Resource(obj.gvr).Namespace(metav1.NamespaceAll).List(context.TODO(), listOptions)
 				if err != nil {
 					log.Errorf("Error verifying object: %s", err)
 					return false, nil
@@ -170,7 +170,7 @@ func (ex *Executor) RunJob() {
 	}
 }
 
-func getItemListForObject(obj object, maxWaitTimeout time.Duration) (*unstructured.UnstructuredList, error) {
+func (ex *Executor) getItemListForObject(obj object) (*unstructured.UnstructuredList, error) {
 	var itemList *unstructured.UnstructuredList
 	labelSelector := labels.Set(obj.LabelSelector).String()
 	listOptions := metav1.ListOptions{
@@ -179,14 +179,14 @@ func getItemListForObject(obj object, maxWaitTimeout time.Duration) (*unstructur
 
 	// Try to find the list of resources by GroupVersionResource.
 	err := util.RetryWithExponentialBackOff(func() (done bool, err error) {
-		itemList, err = DynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
+		itemList, err = ex.dynamicClient.Resource(obj.gvr).List(context.TODO(), listOptions)
 		if err != nil {
 			log.Errorf("Error found listing %s labeled with %s: %s", obj.gvr.Resource, labelSelector, err)
 			return false, nil
 		}
 		log.Infof("Found %d %s with selector %s; patching them", len(itemList.Items), obj.gvr.Resource, labelSelector)
 		return true, nil
-	}, 1*time.Second, 3, 0, maxWaitTimeout)
+	}, 1*time.Second, 3, 0, ex.MaxWaitTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func getItemListForObject(obj object, maxWaitTimeout time.Duration) (*unstructur
 func (ex *Executor) runSequential() {
 	for i := 0; i < ex.JobIterations; i++ {
 		for _, obj := range ex.objects {
-			itemList, err := getItemListForObject(obj, ex.MaxWaitTimeout)
+			itemList, err := ex.getItemListForObject(obj)
 			if err != nil {
 				continue
 			}
@@ -211,7 +211,7 @@ func (ex *Executor) runSequential() {
 			ex.waitForObjects("", waitRateLimiter)
 
 			if ex.objectFinalizer != nil {
-				ex.objectFinalizer(obj)
+				ex.objectFinalizer(ex, obj)
 			}
 			// Wait between object
 			if ex.ObjectDelay > 0 {
@@ -238,7 +238,7 @@ func (ex *Executor) runSequential() {
 func (ex *Executor) runParallel() {
 	var wg sync.WaitGroup
 	for _, obj := range ex.objects {
-		itemList, err := getItemListForObject(obj, ex.MaxWaitTimeout)
+		itemList, err := ex.getItemListForObject(obj)
 		if err != nil {
 			continue
 		}
