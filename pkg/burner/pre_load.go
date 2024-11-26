@@ -169,7 +169,7 @@ func createDSs(dynamicClient *dynamic.DynamicClient, imageList []string, namespa
 	}
 
 	// Convert the typed DaemonSet to an unstructured.Unstructured
-	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ds)
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&ds)
 	if err != nil {
 		return err
 	}
