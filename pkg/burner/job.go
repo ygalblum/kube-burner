@@ -33,6 +33,7 @@ import (
 	"github.com/kube-burner/kube-burner/pkg/util/metrics"
 	log "github.com/sirupsen/logrus"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 )
 
@@ -250,10 +251,11 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 
 // If requests, preload the images used in the test into the node
 func handlePreloadImages(executorList []Executor, kubeClientProvider *config.KubeClientProvider) {
-	clientSet, _ := kubeClientProvider.DefaultClientSet()
+	_, restConfig := kubeClientProvider.DefaultClientSet()
+	dynamicClient := dynamic.NewForConfigOrDie(restConfig)
 	for _, executor := range executorList {
 		if executor.PreLoadImages && executor.JobType == config.CreationJob {
-			if err := preLoadImages(executor, clientSet); err != nil {
+			if err := preLoadImages(dynamicClient, executor); err != nil {
 				log.Fatal(err.Error())
 			}
 		}
@@ -356,7 +358,7 @@ func garbageCollectJob(ctx context.Context, jobExecutor Executor, labelSelector 
 	if wg != nil {
 		defer wg.Done()
 	}
-	util.CleanupNamespaces(ctx, jobExecutor.clientSet, labelSelector)
+	util.CleanupNamespaces(ctx, jobExecutor.dynamicClient, labelSelector)
 	for _, obj := range jobExecutor.objects {
 		jobExecutor.limiter.Wait(ctx)
 		if !obj.Namespaced {

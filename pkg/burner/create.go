@@ -109,7 +109,7 @@ func (ex *Executor) RunCreateJob(ctx context.Context, iterationStart, iterationE
 	}
 	if ex.nsRequired && !ex.NamespacedIterations {
 		ns = ex.Namespace
-		if err = util.CreateNamespace(ex.clientSet, ns, nsLabels, nsAnnotations); err != nil {
+		if err = util.CreateNamespace(ex.dynamicClient, ns, nsLabels, nsAnnotations); err != nil {
 			log.Fatal(err.Error())
 		}
 		*waitListNamespaces = append(*waitListNamespaces, ns)
@@ -131,7 +131,7 @@ func (ex *Executor) RunCreateJob(ctx context.Context, iterationStart, iterationE
 		if ex.nsRequired && ex.NamespacedIterations {
 			ns = ex.generateNamespace(i)
 			if !namespacesCreated[ns] {
-				if err = util.CreateNamespace(ex.clientSet, ns, nsLabels, nsAnnotations); err != nil {
+				if err = util.CreateNamespace(ex.dynamicClient, ns, nsLabels, nsAnnotations); err != nil {
 					log.Error(err.Error())
 					continue
 				}
@@ -383,7 +383,7 @@ func (ex *Executor) RunCreateJobWithChurn(ctx context.Context) {
 		if ex.ChurnDeletionStrategy == "gvr" {
 			CleanupNamespacesUsingGVR(ctx, *ex, namespacesToDelete)
 		}
-		util.CleanupNamespaces(ctx, ex.clientSet, "churndelete=delete")
+		util.CleanupNamespaces(ctx, ex.dynamicClient, "churndelete=delete")
 		log.Info("Re-creating deleted objects")
 		// Re-create objects that were deleted
 		ex.RunCreateJob(ctx, randStart, numToChurn+randStart, &[]string{})

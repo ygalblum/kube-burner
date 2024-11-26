@@ -16,6 +16,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -29,20 +30,48 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func CreateNamespace(clientSet kubernetes.Interface, name string, nsLabels map[string]string, nsAnnotations map[string]string) error {
-	ns := corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: nsLabels, Annotations: nsAnnotations},
+var (
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+)
+
+func CreateNamespace(dynamicClient *dynamic.DynamicClient, name string, nsLabels map[string]string, nsAnnotations map[string]string) error {
+	namespace := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]interface{}{
+				"name":        name,
+				"labels":      nsLabels,
+				"annotations": nsAnnotations,
+			},
+		},
 	}
 	return RetryWithExponentialBackOff(func() (done bool, err error) {
-		_, err = clientSet.CoreV1().Namespaces().Create(context.TODO(), &ns, metav1.CreateOptions{})
+		_, err = dynamicClient.Resource(namespaceGVR).Namespace("").Create(
+			context.TODO(),
+			namespace,
+			metav1.CreateOptions{},
+		)
 		if errors.IsForbidden(err) {
-			log.Fatalf("authorization error creating namespace %s: %s", ns.Name, err)
+			log.Fatalf("authorization error creating namespace %s: %s", namespace.GetName(), err)
 			return false, err
 		}
 		if errors.IsAlreadyExists(err) {
-			log.Infof("Namespace %s already exists", ns.Name)
-			nsSpec, _ := clientSet.CoreV1().Namespaces().Get(context.TODO(), name, metav1.GetOptions{})
-			if nsSpec.Status.Phase == corev1.NamespaceTerminating {
+			log.Infof("Namespace %s already exists", namespace.GetName())
+			nsSpec, _ := dynamicClient.Resource(namespaceGVR).Namespace("").Get(context.TODO(), name, metav1.GetOptions{})
+			// Extract the status.phase field
+			phase, found, err := unstructured.NestedString(nsSpec.Object, "status", "phase")
+			if err != nil {
+				return false, err
+			}
+			if !found {
+				return false, fmt.Errorf("status.phase not found for namespace %s", name)
+			}
+			if phase == string(corev1.NamespaceTerminating) {
 				log.Warnf("Namespace %s is in %v state, retrying", name, corev1.NamespaceTerminating)
 				return false, nil
 			}
@@ -51,14 +80,14 @@ func CreateNamespace(clientSet kubernetes.Interface, name string, nsLabels map[s
 			log.Errorf("unexpected error creating namespace %s: %v", name, err)
 			return false, nil
 		}
-		log.Debugf("Created namespace: %s", ns.Name)
+		log.Debugf("Created namespace: %s", namespace.GetName())
 		return true, err
 	}, 5*time.Second, 3, 0, 5*time.Hour)
 }
 
 // CleanupNamespaces deletes namespaces with the given selector
-func CleanupNamespaces(ctx context.Context, clientSet kubernetes.Interface, labelSelector string) {
-	ns, err := clientSet.CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+func CleanupNamespaces(ctx context.Context, dynamicClient *dynamic.DynamicClient, labelSelector string) {
+	ns, err := dynamicClient.Resource(namespaceGVR).List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		log.Errorf("Error listing namespaces: %v", err.Error())
 		return
@@ -66,20 +95,20 @@ func CleanupNamespaces(ctx context.Context, clientSet kubernetes.Interface, labe
 	if len(ns.Items) > 0 {
 		log.Infof("Deleting %d namespaces with label: %s", len(ns.Items), labelSelector)
 		for _, ns := range ns.Items {
-			err := clientSet.CoreV1().Namespaces().Delete(ctx, ns.Name, metav1.DeleteOptions{})
+			err := dynamicClient.Resource(namespaceGVR).Delete(ctx, ns.GetName(), metav1.DeleteOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
-					log.Errorf("Error deleting namespace %s: %v", ns.Name, err)
+					log.Errorf("Error deleting namespace %s: %v", ns.GetName(), err)
 				}
 			}
 		}
-		waitForDeleteNamespaces(ctx, clientSet, labelSelector)
+		waitForDeleteNamespaces(ctx, dynamicClient, labelSelector)
 	}
 }
 
-func waitForDeleteNamespaces(ctx context.Context, clientSet kubernetes.Interface, labelSelector string) {
+func waitForDeleteNamespaces(ctx context.Context, dynamicClient *dynamic.DynamicClient, labelSelector string) {
 	err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
-		ns, err := clientSet.CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+		ns, err := dynamicClient.Resource(namespaceGVR).List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
 		if err != nil {
 			return false, err
 		}

@@ -23,16 +23,18 @@ import (
 	"github.com/kube-burner/kube-burner/pkg/measurements/types"
 	log "github.com/sirupsen/logrus"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 type measurementFactory struct {
-	jobConfig   *config.Job
-	clientSet   kubernetes.Interface
-	restConfig  *rest.Config
-	createFuncs map[string]measurement
-	metadata    map[string]interface{}
+	jobConfig     *config.Job
+	clientSet     kubernetes.Interface
+	restConfig    *rest.Config
+	dynamicClient *dynamic.DynamicClient
+	createFuncs   map[string]measurement
+	metadata      map[string]interface{}
 }
 
 type measurement interface {
@@ -95,6 +97,7 @@ func (mf *measurementFactory) register(measurement types.Measurement, measuremen
 func SetJobConfig(jobConfig *config.Job, kubeClientProvider *config.KubeClientProvider) {
 	factory.jobConfig = jobConfig
 	factory.clientSet, factory.restConfig = kubeClientProvider.ClientSet(factory.jobConfig.QPS, factory.jobConfig.Burst)
+	factory.dynamicClient = dynamic.NewForConfigOrDie(factory.restConfig)
 }
 
 // Start starts registered measurements

@@ -72,7 +72,7 @@ func init() {
 
 func deployAssets() error {
 	var err error
-	if err = kutil.CreateNamespace(factory.clientSet, types.SvcLatencyNs, nil, nil); err != nil {
+	if err = kutil.CreateNamespace(factory.dynamicClient, types.SvcLatencyNs, nil, nil); err != nil {
 		return err
 	}
 	if _, err = factory.clientSet.CoreV1().Pods(types.SvcLatencyNs).Create(context.TODO(), types.SvcLatencyCheckerPod, metav1.CreateOptions{}); err != nil {
@@ -232,7 +232,7 @@ func (s *serviceLatency) stop() error {
 		s.svcWatcher.StopWatcher()
 		s.epWatcher.StopWatcher()
 	}()
-	kutil.CleanupNamespaces(ctx, factory.clientSet, fmt.Sprintf("kubernetes.io/metadata.name=%s", types.SvcLatencyNs))
+	kutil.CleanupNamespaces(ctx, factory.dynamicClient, fmt.Sprintf("kubernetes.io/metadata.name=%s", types.SvcLatencyNs))
 	s.normalizeMetrics()
 	for _, q := range s.latencyQuantiles {
 		pq := q.(metrics.LatencyQuantiles)

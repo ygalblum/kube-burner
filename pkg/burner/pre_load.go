@@ -26,11 +26,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
 const preLoadNs = "preload-kube-burner"
+
+var (
+	daemonsetGVR = schema.GroupVersionResource{
+		Group:    "apps",
+		Version:  "v1",
+		Resource: "daemonsets",
+	}
+)
+
 
 // NestedPod represents a pod nested in a higher level object such as deployment or a daemonset
 type NestedPod struct {
@@ -42,7 +52,7 @@ type NestedPod struct {
 	} `json:"spec"`
 }
 
-func preLoadImages(job Executor, clientSet kubernetes.Interface) error {
+func preLoadImages(dynamicClient *dynamic.DynamicClient, job Executor) error {
 	log.Info("Pre-load: images from job ", job.Name)
 	imageList, err := getJobImages(job)
 	if err != nil {
@@ -52,7 +62,7 @@ func preLoadImages(job Executor, clientSet kubernetes.Interface) error {
 		log.Infof("No images found to pre-load, continuing")
 		return nil
 	}
-	err = createDSs(clientSet, imageList, job.NamespaceLabels, job.NamespaceAnnotations, job.PreLoadNodeLabels)
+	err = createDSs(dynamicClient, imageList, job.NamespaceLabels, job.NamespaceAnnotations, job.PreLoadNodeLabels)
 	if err != nil {
 		return fmt.Errorf("pre-load: %v", err)
 	}
@@ -61,7 +71,7 @@ func preLoadImages(job Executor, clientSet kubernetes.Interface) error {
 	// 5 minutes should be more than enough to cleanup this namespace
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	util.CleanupNamespaces(ctx, clientSet, "kube-burner-preload=true")
+	util.CleanupNamespaces(ctx, dynamicClient, "kube-burner-preload=true")
 	return nil
 }
 
@@ -94,7 +104,7 @@ func getJobImages(job Executor) ([]string, error) {
 	return imageList, nil
 }
 
-func createDSs(clientSet kubernetes.Interface, imageList []string, namespaceLabels map[string]string, namespaceAnnotations map[string]string, nodeSelectorLabels map[string]string) error {
+func createDSs(dynamicClient *dynamic.DynamicClient, imageList []string, namespaceLabels map[string]string, namespaceAnnotations map[string]string, nodeSelectorLabels map[string]string) error {
 	nsLabels := map[string]string{
 		"kube-burner-preload": "true",
 	}
@@ -105,7 +115,7 @@ func createDSs(clientSet kubernetes.Interface, imageList []string, namespaceLabe
 	for annotation, value := range namespaceAnnotations {
 		nsAnnotations[annotation] = value
 	}
-	if err := util.CreateNamespace(clientSet, preLoadNs, nsLabels, nsAnnotations); err != nil {
+	if err := util.CreateNamespace(dynamicClient, preLoadNs, nsLabels, nsAnnotations); err != nil {
 		log.Fatal(err)
 	}
 	dsName := "preload"
@@ -153,8 +163,24 @@ func createDSs(clientSet kubernetes.Interface, imageList []string, namespaceLabe
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, container)
 	}
 
+	// Create a scheme to convert the typed object to unstructured
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		return err
+	}
+
+	// Convert the typed DaemonSet to an unstructured.Unstructured
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ds)
+	if err != nil {
+		return err
+	}
+
 	log.Infof("Pre-load: Creating DaemonSet using images %v in namespace %s", imageList, preLoadNs)
-	_, err := clientSet.AppsV1().DaemonSets(preLoadNs).Create(context.TODO(), &ds, metav1.CreateOptions{})
+	_, err = dynamicClient.Resource(daemonsetGVR).Namespace(preLoadNs).Create(
+		context.TODO(),
+		&unstructured.Unstructured{Object: unstructuredObj},
+		metav1.CreateOptions{},
+	)
 	if err != nil {
 		return err
 	}
