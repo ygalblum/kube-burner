@@ -41,7 +41,6 @@ var (
 	}
 )
 
-
 // NestedPod represents a pod nested in a higher level object such as deployment or a daemonset
 type NestedPod struct {
 	// Spec represents the object spec
