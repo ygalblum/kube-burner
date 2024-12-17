@@ -27,8 +27,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var ConfigSpec config.Spec
-
 // NewWorkloadHelper initializes workloadHelper
 func NewWorkloadHelper(config Config, embedConfig *embed.FS, kubeClientProvider *config.KubeClientProvider) WorkloadHelper {
 	if config.ConfigDir == "" {
@@ -46,31 +44,36 @@ func NewWorkloadHelper(config Config, embedConfig *embed.FS, kubeClientProvider 
 
 func (wh *WorkloadHelper) Run(workload string) int {
 	configFile := fmt.Sprintf("%s.yml", workload)
+	var embedFS *embed.FS
+	var embedFSDir string
 	if _, err := os.Stat(configFile); err != nil {
-		ConfigSpec.EmbedFS = wh.embedConfig
-		ConfigSpec.EmbedFSDir = path.Join(wh.ConfigDir, workload)
+		embedFS = wh.embedConfig
+		embedFSDir = path.Join(wh.ConfigDir, workload)
 	}
-	f, err := util.GetReader(configFile, ConfigSpec.EmbedFS, ConfigSpec.EmbedFSDir)
+	f, err := util.GetReader(configFile, embedFS, embedFSDir)
 	if err != nil {
 		log.Fatalf("Error reading configuration file: %v", err.Error())
 	}
-	ConfigSpec, err = config.Parse(wh.UUID, wh.Timeout, f)
+	configSpec, err := config.Parse(wh.UUID, wh.Timeout, f)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Set embedFS parameters according to where the configuration file was found
+	configSpec.EmbedFS = embedFS
+	configSpec.EmbedFSDir = embedFSDir
 	// Overwrite credentials
-	for pos := range ConfigSpec.MetricsEndpoints {
-		ConfigSpec.MetricsEndpoints[pos].Endpoint = wh.PrometheusURL
-		ConfigSpec.MetricsEndpoints[pos].Token = wh.PrometheusToken
+	for pos := range configSpec.MetricsEndpoints {
+		configSpec.MetricsEndpoints[pos].Endpoint = wh.PrometheusURL
+		configSpec.MetricsEndpoints[pos].Token = wh.PrometheusToken
 	}
 	metricsScraper := metrics.ProcessMetricsScraperConfig(metrics.ScraperConfig{
-		ConfigSpec:      &ConfigSpec,
+		ConfigSpec:      &configSpec,
 		MetricsEndpoint: wh.MetricsEndpoint,
 		SummaryMetadata: wh.SummaryMetadata,
 		MetricsMetadata: wh.MetricsMetadata,
 		UserMetaData:    wh.UserMetadata,
 	})
-	rc, err := burner.Run(ConfigSpec, wh.kubeClientProvider, metricsScraper)
+	rc, err := burner.Run(configSpec, wh.kubeClientProvider, metricsScraper)
 	if err != nil {
 		log.Error(err.Error())
 	}
