@@ -27,6 +27,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var ConfigSpec config.Spec
+
 // NewWorkloadHelper initializes workloadHelper
 func NewWorkloadHelper(config Config, embedConfig *embed.FS, kubeClientProvider *config.KubeClientProvider) WorkloadHelper {
 	if config.ConfigDir == "" {
@@ -54,26 +56,26 @@ func (wh *WorkloadHelper) Run(workload string) int {
 	if err != nil {
 		log.Fatalf("Error reading configuration file: %v", err.Error())
 	}
-	configSpec, err := config.Parse(wh.UUID, wh.Timeout, f)
+	ConfigSpec, err = config.Parse(wh.UUID, wh.Timeout, f)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Set embedFS parameters according to where the configuration file was found
-	configSpec.EmbedFS = embedFS
-	configSpec.EmbedFSDir = embedFSDir
+	ConfigSpec.EmbedFS = embedFS
+	ConfigSpec.EmbedFSDir = embedFSDir
 	// Overwrite credentials
-	for pos := range configSpec.MetricsEndpoints {
-		configSpec.MetricsEndpoints[pos].Endpoint = wh.PrometheusURL
-		configSpec.MetricsEndpoints[pos].Token = wh.PrometheusToken
+	for pos := range ConfigSpec.MetricsEndpoints {
+		ConfigSpec.MetricsEndpoints[pos].Endpoint = wh.PrometheusURL
+		ConfigSpec.MetricsEndpoints[pos].Token = wh.PrometheusToken
 	}
 	metricsScraper := metrics.ProcessMetricsScraperConfig(metrics.ScraperConfig{
-		ConfigSpec:      &configSpec,
+		ConfigSpec:      &ConfigSpec,
 		MetricsEndpoint: wh.MetricsEndpoint,
 		SummaryMetadata: wh.SummaryMetadata,
 		MetricsMetadata: wh.MetricsMetadata,
 		UserMetaData:    wh.UserMetadata,
 	})
-	rc, err := burner.Run(configSpec, wh.kubeClientProvider, metricsScraper)
+	rc, err := burner.Run(ConfigSpec, wh.kubeClientProvider, metricsScraper)
 	if err != nil {
 		log.Error(err.Error())
 	}
