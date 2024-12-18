@@ -148,6 +148,7 @@ func ParseWithUserdata(uuid string, timeout time.Duration, configFileReader, use
 	if err != nil {
 		return configSpec, err
 	}
+	inputData["kube-burner-uuid"] = uuid
 	renderedCfg, err := util.RenderTemplate(cfg, inputData, util.MissingKeyError)
 	if err != nil {
 		return configSpec, fmt.Errorf("error rendering configuration template: %s", err)
