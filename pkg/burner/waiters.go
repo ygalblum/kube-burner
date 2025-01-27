@@ -243,6 +243,11 @@ func (ex *Executor) verifyCondition(ns string, obj object) error {
 		}
 	VERIFY:
 		for _, item := range objs.Items {
+			if obj.namespaced {
+				log.Debugf("Waiting for %s/%s in ns %s to be ready", obj.gvr.Resource, item.GetName(), ns)
+			} else {
+				log.Debugf("Waiting for %s/%s to be ready", obj.gvr.Resource, item.GetName())
+			}
 			isVerified := true
 			for _, statusPath := range obj.WaitOptions.CustomStatusPaths {
 				status, found, err := unstructured.NestedMap(item.Object, "status")
@@ -259,27 +264,31 @@ func (ex *Executor) verifyCondition(ns string, obj object) error {
 						return false, err
 					}
 					iter := query.Run(status)
+					firstIter := true
 					for {
 						v, ok := iter.Next()
 						if !ok {
+							if firstIter {
+								log.Debugf("statusPath.Key [%s] not found", statusPath.Key)
+							}
 							break
 						}
+						firstIter = false
+
 						if err, ok := v.(error); ok {
 							log.Warnf("Error evaluating jq path: [%s]: %s", statusPath.Key, err)
 							break
 						}
 						if v == statusPath.Value {
+							log.Debugf("statusPath.Key [%s] value [%s] matches expected [%s]", statusPath.Key, v, statusPath.Value)
 							isStatusValid = true
 							break
+						} else {
+							log.Debugf("statusPath.Key [%s] value [%s] does not match expected [%s]", statusPath.Key, v, statusPath.Value)
 						}
 					}
 				}
 				isVerified = isVerified && isStatusValid
-			}
-			if obj.namespaced {
-				log.Debugf("Waiting for %s in ns %s to be ready", obj.gvr.Resource, ns)
-			} else {
-				log.Debugf("Waiting for %s to be ready", obj.gvr.Resource)
 			}
 			if isVerified {
 				log.Debugf("Status verified for object %s/%s", item.GetKind(), item.GetName())
