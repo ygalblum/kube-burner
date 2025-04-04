@@ -103,6 +103,7 @@ func (dvlmf dvLatencyMeasurementFactory) newMeasurement(jobConfig *config.Job, c
 func (dv *dvLatency) handleCreateDV(obj interface{}) {
 	dataVolume := obj.(*cdiv1beta1.DataVolume)
 	dvLabels := dataVolume.GetLabels()
+	log.Debugf("DV Created. Name [%s]. UID [%s]", dataVolume.Name, dataVolume.UID)
 	dv.metrics.LoadOrStore(string(dataVolume.UID), dvMetric{
 		Timestamp:    dataVolume.CreationTimestamp.Time.UTC(),
 		Namespace:    dataVolume.Namespace,
@@ -128,21 +129,22 @@ func (dv *dvLatency) handleUpdateDV(obj interface{}) {
 			switch c.Type {
 			case cdiv1beta1.DataVolumeBound:
 				if dvm.dvBound.IsZero() {
-					log.Debugf("Updated bound time for dataVolume [%s]", dataVolume.Name)
+					log.Debugf("Updated bound time for dataVolume [%s]:[%s]", dataVolume.Name, dataVolume.UID)
 					dvm.dvBound = c.LastTransitionTime.Time.UTC()
 				}
 			case cdiv1beta1.DataVolumeRunning:
 				if dvm.dvRunning.IsZero() {
-					log.Debugf("Updated running time for dataVolume [%s]", dataVolume.Name)
+					log.Debugf("Updated running time for dataVolume [%s]:[%s]", dataVolume.Name, dataVolume.UID)
 					dvm.dvRunning = c.LastTransitionTime.Time.UTC()
 				}
 			case cdiv1beta1.DataVolumeReady:
 				if dvm.dvReady.IsZero() {
-					log.Debugf("Updated ready time for dataVolume [%s]", dataVolume.Name)
+					log.Debugf("Updated ready time for dataVolume [%s]:[%s]", dataVolume.Name, dataVolume.UID)
 					dvm.dvReady = c.LastTransitionTime.Time.UTC()
 				}
 			}
 		}
+		log.Debugf("Storing info for dataVolume [%s]:[%s]. Bound [%v]. Running [%v]. Ready [%v]", dataVolume.Name, dataVolume.UID, dvm.dvBound, dvm.dvRunning, dvm.dvReady)
 		dv.metrics.Store(string(dataVolume.UID), dvm)
 	}
 }
