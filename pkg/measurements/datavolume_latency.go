@@ -266,11 +266,13 @@ func (dv *dvLatency) normalizeMetrics() float64 {
 	dataVolumeCount := 0
 	erroredDataVolumes := 0
 
+	log.Debug("Normalizing DataVolume metrics")
 	dv.metrics.Range(func(key, value interface{}) bool {
 		m := value.(dvMetric)
+		log.Debugf("Reading info for dataVolume [%s]:[%s]. Bound [%v]. Running [%v]. Ready [%v]", m.Name, key, m.dvBound, m.dvRunning, m.dvReady)
 		// Skip DataVolume if it did not reach the Ready state (this timestamp isn't set)
 		if m.dvReady.IsZero() {
-			log.Warningf("DataVolume %v latency ignored as it did not reach Ready state", m.Name)
+			log.Warningf("DataVolume [%v]:[%v] latency ignored as it did not reach Ready state", m.Name, m.UUID)
 			return true
 		}
 		// latencyTime should be always larger than zero, however, in some cases, it might be a
